@@ -22,6 +22,12 @@ lazy val persistence = (project in file(".")).
   settings(commonSettings: _*).
   settings(publishSettings: _*)
 
+lazy val examples = (project in file("examples")).
+  settings(name := "akka-typed-persistence-examples").
+  dependsOn(persistence).
+  settings(commonSettings: _*).
+  settings(publishArtifact := false)
+
 lazy val commonSettings = Seq(
 
   // Scala:
@@ -127,7 +133,7 @@ lazy val dependencies = new {
 }
 
 // For CI et al.:
-addCommandAlias("staticAnalysis", ";test:compile") // additional tools can be added here
-addCommandAlias("testAll", ";test")
+addCommandAlias("staticAnalysis", ";test:compile;examples/test:compile") // additional tools can be added here
+addCommandAlias("testAll", ";test;examples/test")
 addCommandAlias("validate", ";staticAnalysis;testAll")
 addCommandAlias("measureCoverage", ";clean;coverage;test;coverageReport;coverageOff")
