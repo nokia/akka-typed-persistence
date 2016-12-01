@@ -14,8 +14,4 @@
  * limitations under the License.
  */
 
-addSbtPlugin("org.scalastyle" % "scalastyle-sbt-plugin" % "0.8.0")
-addSbtPlugin("org.scalariform" % "sbt-scalariform" % "1.6.0")
-addSbtPlugin("org.wartremover" % "sbt-wartremover" % "1.2.1")
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.5.0")
 addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.0.0-M14-3")
