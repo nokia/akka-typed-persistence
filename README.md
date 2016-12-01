@@ -33,3 +33,5 @@ with event sourcing. It provides:
 
 A conference talk introducing the library was presented at
 [Scala By the Bay](http://sched.co/7iUT) ([slides](https://t.co/IsENEuxShc)).
+For the full code of the example in the talk, see
+[this file](examples/src/main/scala/com/example/PingActor.scala).
