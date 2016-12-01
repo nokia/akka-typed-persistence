@@ -39,6 +39,9 @@ class PingActorSpec extends TestKit(ActorSystem("pingSystem")) with FlatSpecLike
   implicit val scheduler: Scheduler =
     this.system.scheduler
 
+  implicit override def patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = super.patienceConfig.timeout * 5)
+
   val dummyRef: ActorRef[Any] =
     actorRefAdapter(this.testActor)
 

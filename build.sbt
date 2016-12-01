@@ -56,7 +56,6 @@ lazy val commonSettings = Seq(
   sources in (Compile, doc) := List(),
 
   // Static analysis:
-  Utils.compileWithScalastyle,
   scalastyleFailOnError := true,
   wartremoverErrors ++= Seq(
     Wart.EitherProjectionPartial,
@@ -133,7 +132,7 @@ lazy val dependencies = new {
 }
 
 // For CI et al.:
-addCommandAlias("staticAnalysis", ";test:compile;examples/test:compile") // additional tools can be added here
+addCommandAlias("staticAnalysis", ";test:compile;scalastyle;examples/test:compile;examples/scalastyle") // additional tools can be added here
 addCommandAlias("testAll", ";test;examples/test")
 addCommandAlias("validate", ";staticAnalysis;testAll")
 addCommandAlias("measureCoverage", ";clean;coverage;test;coverageReport;coverageOff")
