@@ -16,7 +16,6 @@
 
 package com.nokia.ntp.ct
 
-import akka.event.LoggingAdapter
 import akka.{ typed => at }
 import akka.typed.ScalaDSL.MessageOrSignal
 
@@ -88,12 +87,6 @@ package object persistence {
 
   // Internal utilities:
 
-  // TODO: move to tests
-  private[persistence] implicit class ContextOps[A](ctx: at.ActorContext[A]) {
-    def log: LoggingAdapter =
-      ctx.system.log
-  }
-
   private[persistence] final val unsafeCast =
     "org.wartremover.warts.AsInstanceOf"
 
@@ -116,6 +109,6 @@ package object persistence {
     cats.Eq.fromUniversalEquals
 
   /** For creating typed ActorRef adapters */
-  private[persistence] def actorRef[A](untyped: akka.actor.ActorRef): akka.typed.ActorRef[A] =
-    akka.typed.adapter.actorRefAdapter(untyped)
+  private[persistence] def actorRef[A](untyped: akka.actor.ActorRef): at.ActorRef[A] =
+    at.adapter.actorRefAdapter(untyped)
 }

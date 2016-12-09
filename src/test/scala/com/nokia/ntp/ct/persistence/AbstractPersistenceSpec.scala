@@ -37,6 +37,7 @@ import com.typesafe.config.ConfigValueFactory
 
 import akka.{ actor => au, persistence => ap, typed => at }
 import akka.Done
+import akka.event.LoggingAdapter
 import akka.testkit.TestKit
 import akka.typed.AskPattern._
 import akka.typed.ScalaDSL._
@@ -193,6 +194,11 @@ abstract class AbstractPersistenceSpec
 }
 
 object AbstractPersistenceSpec {
+
+  private[persistence] implicit class ContextOps[A](ctx: at.ActorContext[A]) {
+    def log: LoggingAdapter =
+      ctx.system.log
+  }
 
   sealed trait Mes
   final case class GetInt(replyTo: at.ActorRef[Int]) extends Mes
