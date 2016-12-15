@@ -116,7 +116,7 @@ lazy val dependencies = new {
 
   val akka = new {
 
-    val version = "2.4.11"
+    val version = "2.4.14"
     val group = "com.typesafe.akka"
 
     val actor = group %% "akka-actor" % version
