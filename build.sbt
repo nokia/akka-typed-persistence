@@ -92,7 +92,9 @@ lazy val commonSettings = Seq(
     Seq(dependencies.cats, dependencies.shapeless),
     dependencies.fs2,
     Seq(dependencies.scalatest, dependencies.scalacheck)
-  ).flatten
+  ).flatten,
+
+  addCompilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.2.0" cross CrossVersion.full)
 )
 
 lazy val publishSettings = Seq(
@@ -104,11 +106,11 @@ lazy val publishSettings = Seq(
 
 lazy val dependencies = new {
 
-  val cats = "org.typelevel" %% "cats" % "0.7.2"
+  val cats = "org.typelevel" %% "cats" % "0.8.1"
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.1",
-    "co.fs2" %% "fs2-cats" % "0.1.0"
+    "co.fs2" %% "fs2-core" % "0.9.2",
+    "co.fs2" %% "fs2-cats" % "0.2.0"
   )
 
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.0" % "test-internal"

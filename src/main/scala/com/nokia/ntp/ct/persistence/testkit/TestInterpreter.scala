@@ -23,8 +23,8 @@ import scala.util.Random
 
 import akka.{ typed => at }
 
-import cats.{ ~>, Eq, Monad, RecursiveTailRecM }
-import cats.data.{ StateT, Xor }
+import cats.{ ~>, Eq, Monad }
+import cats.data.StateT
 import cats.implicits._
 
 /**
@@ -77,16 +77,14 @@ abstract class TestInterpreter[M, D, S](
     def snap(snapshot: S): Store = Snapshot(snapshot)
   }
 
-  type Xss[X] = Xor[SpecState, X]
+  type Xss[X] = Either[SpecState, X]
   type TestProc[A] = StateT[Xss, InterpState, A]
 
-  // aargh ... SI-2712
-  implicit val xssMonad: Monad[Xss] with RecursiveTailRecM[Xss] =
-    Xor.catsDataInstancesForXor[SpecState]
+  //  // aargh ... SI-2712
+  //  implicit val xssMonad: Monad[Xss] =
+  //    catsStdInstancesForEither[SpecState]
   implicit val tpMonad: Monad[TestProc] =
     StateT.catsDataMonadForStateT[Xss, InterpState]
-  implicit val tpTrm: RecursiveTailRecM[TestProc] =
-    StateT.catsDataRecursiveTailRecMForStateT[Xss, InterpState]
 
   val getInterpSt: TestProc[InterpState] =
     StateT.inspect[Xss, InterpState, InterpState](identity)
@@ -106,7 +104,7 @@ abstract class TestInterpreter[M, D, S](
           case Failure(ex) =>
             for {
               st <- getInterpSt
-              ex <- StateT.lift[Xss, InterpState, S](Xor.left(Error(ex, st)))
+              ex <- StateT.lift[Xss, InterpState, S](Left(Error(ex, st)))
             } yield ex
         }
       case _: ProcA.Snapshot[S] =>
@@ -121,25 +119,25 @@ abstract class TestInterpreter[M, D, S](
       case _: ProcA.Same[S] =>
         getActorSt
       case _: ProcA.Stop[S] =>
-        StateT.lift[Xss, InterpState, S](Xor.left(Stopped))
+        StateT.lift[Xss, InterpState, S](Left(Stopped))
       case att: ProcA.Attempt[a] =>
-        att.proc.foldMap(interpreter).transformF[Xss, Xor[ProcException, a]] {
-          case x @ Xor.Left(Error(ex, st)) => ex match {
+        att.proc.foldMap(interpreter).transformF[Xss, Either[ProcException, a]] {
+          case x @ Left(Error(ex, st)) => ex match {
             case ex: TypedPersistentActor.ActorStop =>
-              x
+              x.asInstanceOf[Either[SpecState, (InterpState, Either[ProcException, a])]]
             case ex: ProcException =>
-              Xor.right((st, Xor.left(ex)))
+              Right((st, Left(ex)))
             case ex: Any =>
-              Xor.right((st, Xor.left(UnexpectedException(ex))))
+              Right((st, Left(UnexpectedException(ex))))
           }
-          case x @ Xor.Left(Stopped) =>
-            x
-          case Xor.Right((st, x)) =>
-            Xor.right((st, Xor.right(x)))
+          case x @ Left(Stopped) =>
+            x.asInstanceOf[Either[SpecState, (InterpState, Either[ProcException, a])]]
+          case Right((st, x)) =>
+            Right((st, Right(x)))
         }
       case f: ProcA.Fail[X] =>
         getInterpSt.flatMap { st =>
-          StateT.lift[Xss, InterpState, X](Xor.left(Error(f.ex, st)))
+          StateT.lift[Xss, InterpState, X](Left(Error(f.ex, st)))
         }
     }
   }
@@ -161,7 +159,7 @@ abstract class TestInterpreter[M, D, S](
     st <- getInterpSt
     r <- Try(st.behavior.messageProc(st.ctx, msg)) match {
       case Success(p) => p.foldMap(interpreter)
-      case Failure(ex) => StateT.lift[Xss, InterpState, S](Xor.left(Error(ex, st)))
+      case Failure(ex) => StateT.lift[Xss, InterpState, S](Left(Error(ex, st)))
     }
   } yield r
 
@@ -169,7 +167,7 @@ abstract class TestInterpreter[M, D, S](
     st <- getInterpSt
     r <- Try(st.behavior.managementProc(st.ctx, sig)) match {
       case Success(p) => p.foldMap(interpreter)
-      case Failure(ex) => StateT.lift[Xss, InterpState, S](Xor.left(Error(ex, st)))
+      case Failure(ex) => StateT.lift[Xss, InterpState, S](Left(Error(ex, st)))
     }
   } yield r
 
@@ -191,7 +189,7 @@ abstract class TestInterpreter[M, D, S](
     st <- getInterpSt
     _ <- assert(x === y, s"${x} was not equal to ${y}") match {
       case Success(()) => StateT.pure[Xss, InterpState, Unit](())
-      case Failure(ex) => StateT.lift[Xss, InterpState, S](Xor.left(Error(ex, st)))
+      case Failure(ex) => StateT.lift[Xss, InterpState, S](Left(Error(ex, st)))
     }
   } yield ()
 
@@ -200,7 +198,7 @@ abstract class TestInterpreter[M, D, S](
     _ <- if (b) {
       StateT.pure[Xss, InterpState, Unit](())
     } else {
-      StateT.lift[Xss, InterpState, S](Xor.left(Error(new AssertionError, st)))
+      StateT.lift[Xss, InterpState, S](Left(Error(new AssertionError, st)))
     }
   } yield ()
 
@@ -217,12 +215,12 @@ abstract class TestInterpreter[M, D, S](
   def expectStop: TestProc[Unit] = {
     getInterpSt.transformF[Xss, Unit] { x: Xss[(InterpState, InterpState)] =>
       x match {
-        case Xor.Left(Stopped) =>
-          Xor.left[SpecState, (InterpState, Unit)](Stopped)
-        case Xor.Left(Error(ex, st)) =>
-          Xor.left[SpecState, (InterpState, Unit)](Error(new AssertionError(s"expected stop, got exception: ${ex}"), st))
-        case Xor.Right((st, _)) =>
-          Xor.left[SpecState, (InterpState, Unit)](Error(new AssertionError("expected stop"), st))
+        case Left(Stopped) =>
+          Left[SpecState, (InterpState, Unit)](Stopped)
+        case Left(Error(ex, st)) =>
+          Left[SpecState, (InterpState, Unit)](Error(new AssertionError(s"expected stop, got exception: ${ex}"), st))
+        case Right((st, _)) =>
+          Left[SpecState, (InterpState, Unit)](Error(new AssertionError("expected stop"), st))
       }
     }
   }
@@ -232,9 +230,9 @@ abstract class TestInterpreter[M, D, S](
 
   def check[A](p: TestProc[A]): Unit = {
     run(p) match {
-      case Xor.Left(Stopped) =>
-      case Xor.Left(Error(ex, _)) => fail(ex.getMessage)
-      case Xor.Right(st) =>
+      case Left(Stopped) =>
+      case Left(Error(ex, _)) => fail(ex.getMessage)
+      case Right(st) =>
     }
   }
 }

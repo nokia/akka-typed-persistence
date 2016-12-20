@@ -19,7 +19,6 @@ package persistence
 
 import akka.{ persistence => ap, typed => at }
 
-import cats.data.Xor
 import cats.free.Free
 
 /**
@@ -152,7 +151,7 @@ object ProcA {
   private[persistence] final case class Change[S](state: S) extends ProcA[S]
   private[persistence] final case class Same[S]() extends ProcA[S]
   private[persistence] final case class Stop[S]() extends ProcA[S]
-  private[persistence] final case class Attempt[A](proc: Proc[A]) extends ProcA[Xor[ProcException, A]]
+  private[persistence] final case class Attempt[A](proc: Proc[A]) extends ProcA[Either[ProcException, A]]
   private[persistence] final case class Fail[A](ex: ProcException) extends ProcA[A]
 
   private[persistence] def same[X]: Proc[X] =
