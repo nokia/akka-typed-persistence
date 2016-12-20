@@ -124,14 +124,14 @@ abstract class TestInterpreter[M, D, S](
         att.proc.foldMap(interpreter).transformF[Xss, Either[ProcException, a]] {
           case x @ Left(Error(ex, st)) => ex match {
             case ex: TypedPersistentActor.ActorStop =>
-              x.asInstanceOf[Either[SpecState, (InterpState, Either[ProcException, a])]]
+              x.copy()
             case ex: ProcException =>
               Right((st, Left(ex)))
             case ex: Any =>
               Right((st, Left(UnexpectedException(ex))))
           }
           case x @ Left(Stopped) =>
-            x.asInstanceOf[Either[SpecState, (InterpState, Either[ProcException, a])]]
+            x.copy()
           case Right((st, x)) =>
             Right((st, Right(x)))
         }
