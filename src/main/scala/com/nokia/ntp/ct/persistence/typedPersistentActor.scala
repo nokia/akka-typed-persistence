@@ -22,7 +22,6 @@ import scala.util.control.ControlThrowable
 import akka.{ actor => au, persistence => ap, typed => at }
 
 import cats.~>
-import cats.data.Xor
 
 import fs2.Task
 import fs2.interop.cats._
@@ -313,9 +312,9 @@ private final class TypedPersistentActor[A, D, S](
         val inner = interpret(p)
         inner.attempt.flatMap {
           case Left(ex: ActorStop) => Task.fail(ex)
-          case Left(ex: ProcException) => Task.now(Xor.Left(ex))
-          case Left(ex) => Task.now(Xor.Left(UnexpectedException(ex)))
-          case Right(res) => Task.now(Xor.Right(res))
+          case Left(ex: ProcException) => Task.now(Left(ex))
+          case Left(ex) => Task.now(Left(UnexpectedException(ex)))
+          case Right(res) => Task.now(Right(res))
         }
       case ProcA.Fail(ex) =>
         Task.fail(ex)

@@ -19,7 +19,6 @@ package com.nokia.ntp.ct
 import akka.{ typed => at }
 import akka.typed.ScalaDSL.MessageOrSignal
 
-import cats.data.Xor
 import cats.free.Free
 
 /**
@@ -43,8 +42,8 @@ package object persistence {
   implicit class ProcOps[A](p: Proc[A]) {
 
     /** Error handling combinator (catch and reify) */
-    def attempt: Proc[Xor[ProcException, A]] =
-      Free.liftF[ProcA, Xor[ProcException, A]](ProcA.Attempt[A](p))
+    def attempt: Proc[Either[ProcException, A]] =
+      Free.liftF[ProcA, Either[ProcException, A]](ProcA.Attempt[A](p))
 
     /** Error handling combinator (catch) */
     def recover(f: PartialFunction[ProcException, A]): Proc[A] =
@@ -53,8 +52,8 @@ package object persistence {
     /** Error handling combinator (catch with possible rethrow) */
     def recoverWith(f: PartialFunction[ProcException, Proc[A]]): Proc[A] = {
       attempt.flatMap {
-        case Xor.Left(ex) => f.lift(ex) getOrElse ProcA.fail(ex)
-        case Xor.Right(res) => ProcA.pure(res)
+        case Left(ex) => f.lift(ex) getOrElse ProcA.fail(ex)
+        case Right(res) => ProcA.pure(res)
       }
     }
   }
@@ -95,10 +94,6 @@ package object persistence {
 
   private[persistence] def impossible(msg: => String): Nothing =
     throw new IllegalStateException(msg)
-
-  /** fs2.Task is trampolined */
-  private[persistence] implicit val taskIsStackSafe: cats.RecursiveTailRecM[fs2.Task] =
-    cats.RecursiveTailRecM.create
 
   /** ActorRefs have a correct equals */
   private[persistence] implicit def actorRefEq[A]: cats.Eq[akka.typed.ActorRef[A]] =
