@@ -23,7 +23,7 @@ import scala.util.Random
 
 import akka.{ typed => at }
 
-import cats.{ ~>, Eq, Monad }
+import cats.{ ~>, Eq }
 import cats.data.StateT
 import cats.implicits._
 
@@ -79,12 +79,6 @@ abstract class TestInterpreter[M, D, S](
 
   type Xss[X] = Either[SpecState, X]
   type TestProc[A] = StateT[Xss, InterpState, A]
-
-  //  // aargh ... SI-2712
-  //  implicit val xssMonad: Monad[Xss] =
-  //    catsStdInstancesForEither[SpecState]
-  implicit val tpMonad: Monad[TestProc] =
-    StateT.catsDataMonadForStateT[Xss, InterpState]
 
   val getInterpSt: TestProc[InterpState] =
     StateT.inspect[Xss, InterpState, InterpState](identity)
