@@ -37,11 +37,9 @@ trait SelfDeployingBehavior[A] extends at.Behavior[A] {
   def props: au.Props @@ A =
     cachedProps
 
-  def deployInto(system: au.ActorSystem, name: String = ""): at.ActorRef[A] = {
-    at.adapter.actorRefAdapter(
-      if (name.nonEmpty) system.actorOf(props, name)
-      else system.actorOf(props)
-    )
+  def deployInto[D](deployer: D, name: String = "")(implicit D: ActorDeployer[D]): at.ActorRef[A] = {
+    if (name.nonEmpty) D.deploy(deployer)(props, name)
+    else D.deployAnonymous(deployer)(props)
   }
 
   protected def untypedProps: au.Props
