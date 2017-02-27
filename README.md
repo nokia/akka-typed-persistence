@@ -61,5 +61,5 @@ For how to use the library, see
 **Dependencies:**
 
 * Scala 2.11.8
-* Akka 2.4.14
-* Cats 0.8.1, shapeless 2.3.2 and FS2 0.9.2
+* Akka 2.4.17
+* Cats 0.9.0, shapeless 2.3.2 and FS2 0.9.4

@@ -106,11 +106,11 @@ lazy val publishSettings = Seq(
 
 lazy val dependencies = new {
 
-  val cats = "org.typelevel" %% "cats" % "0.8.1"
+  val cats = "org.typelevel" %% "cats" % "0.9.0"
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.2",
-    "co.fs2" %% "fs2-cats" % "0.2.0"
+    "co.fs2" %% "fs2-core" % "0.9.4",
+    "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.0" % "test-internal"
@@ -118,7 +118,7 @@ lazy val dependencies = new {
 
   val akka = new {
 
-    val version = "2.4.14"
+    val version = "2.4.17"
     val group = "com.typesafe.akka"
 
     val actor = group %% "akka-actor" % version
