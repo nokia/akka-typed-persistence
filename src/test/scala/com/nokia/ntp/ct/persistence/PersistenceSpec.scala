@@ -420,6 +420,29 @@ class PersistenceSpec extends AbstractPersistenceSpec {
     // the actor should NOT be stopped:
     ref.?[Option[Int]](Get("foo", _)).futureValue should be (Some(snapThreshold))
   }
+
+  "Last sequence number" should "be accessible in the actor" in {
+    val name = "seqNr-normal"
+    val ref = getSeqNr(name).deployInto(system, name)
+    (ref ? GetSeqNr).futureValue should be (0L)
+    (ref ? GetSeqNr).futureValue should be (0L)
+    (ref ? Persist).futureValue
+    (ref ? GetSeqNr).futureValue should be (1L)
+    (ref ? GetSeqNr).futureValue should be (1L)
+    (ref ? Persist).futureValue
+    (ref ? Persist).futureValue
+    (ref ? GetSeqNr).futureValue should be (3L)
+    ref ! End
+    awaitTermination(ref).futureValue
+
+    val ref2 = getSeqNr(name).deployInto(system, name)
+    (ref2 ? GetSeqNr).futureValue should be (3L)
+    (ref2 ? Persist).futureValue
+    (ref2 ? Persist).futureValue
+    (ref2 ? GetSeqNr).futureValue should be (5L)
+    ref2 ! End
+    awaitTermination(ref2).futureValue
+  }
 }
 
 object PersistenceSpec {
@@ -607,6 +630,35 @@ object PersistenceSpec {
         ref ! state
         p.same
       case Stop =>
+        p.stop
+    }
+    }
+
+  sealed trait SeqNrOp
+  final case class GetSeqNr(replyTo: at.ActorRef[Long]) extends SeqNrOp
+  final case class Persist(ackTo: at.ActorRef[Unit]) extends SeqNrOp
+  final case object End extends SeqNrOp
+
+  implicit val updateUnit: Update[Unit, Unit] =
+    Update.instance { (s, e) => s }
+
+  def getSeqNr(pid: PersistenceId) = PersistentFull[SeqNrOp, Unit, Unit](
+    (),
+    _ => pid,
+    Recovery { (_, _, _) => () }
+  ) { state => p => PersistentBehavior.Total {
+      case GetSeqNr(ref) =>
+        for {
+          snr <- p.lastSequenceNr
+          _ = ref ! snr
+          state <- p.same
+        } yield state
+      case Persist(ref) =>
+        for {
+          state <- p.apply(())
+          _ = ref ! (())
+        } yield state
+      case End =>
         p.stop
     }
     }

@@ -304,6 +304,8 @@ private final class TypedPersistentActor[A, D, S](
           actor.changeState(ch.state)
           ch.state
         }
+      case ProcA.SeqNr =>
+        Task.delay(actor.lastSequenceNr)
       case _: ProcA.Same[S] =>
         Task.delay(actor.currentBehavior.state(actor.ctx))
       case ProcA.Stop() =>

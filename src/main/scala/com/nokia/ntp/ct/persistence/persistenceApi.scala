@@ -76,6 +76,14 @@ sealed trait PersistenceApi[A, D, S] {
     Free.liftF[ProcA, S](ProcA.Change[S](state))
 
   /**
+   * Returns the sequence number
+   * of the last written (or replayed)
+   * event.
+   */
+  def lastSequenceNr: Proc[Long] =
+    Free.liftF[ProcA, Long](ProcA.SeqNr)
+
+  /**
    * A `Proc` which changes the managed state to
    * the stopped state.
    */
@@ -149,6 +157,7 @@ object ProcA {
   private[persistence] final case class Persist[D, S](data: D, async: Boolean) extends ProcA[S]
   private[persistence] final case class Snapshot[S]() extends ProcA[S]
   private[persistence] final case class Change[S](state: S) extends ProcA[S]
+  private[persistence] final case object SeqNr extends ProcA[Long]
   private[persistence] final case class Same[S]() extends ProcA[S]
   private[persistence] final case class Stop[S]() extends ProcA[S]
   private[persistence] final case class Attempt[A](proc: Proc[A]) extends ProcA[Either[ProcException, A]]
