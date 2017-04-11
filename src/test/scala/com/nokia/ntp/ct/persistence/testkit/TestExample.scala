@@ -34,6 +34,7 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
   case class Add(n: Int, replyTo: ActorRef[Long]) extends MyMsg
   case object Snap extends MyMsg
   case object Stop extends MyMsg
+  case class ReadSeqNr(replyTo: ActorRef[Long]) extends MyMsg
 
   sealed trait MyEv
   case class Incr(amount: Int) extends MyEv
@@ -66,6 +67,11 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
         p.snapshot
       case Msg(_, Stop) =>
         p.stop
+      case Msg(_, ReadSeqNr(r)) =>
+        for {
+          seqNr <- p.lastSequenceNr
+          _ = r ! seqNr
+        } yield state
       case Sig(_, _) =>
         p.same
     }
@@ -80,8 +86,11 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
 
   "It" should "work" in {
     ti.check(for {
-      _ <- ti.expect[Long](Add(3, _), 3)
-      _ <- ti.expect[Long](Add(2, _), 5)
+      _ <- ti.expect[Long](ReadSeqNr, 0L)
+      _ <- ti.expect[Long](Add(3, _), 3L)
+      _ <- ti.expect[Long](ReadSeqNr, 1L)
+      _ <- ti.expect[Long](Add(2, _), 5L)
+      _ <- ti.expect[Long](ReadSeqNr, 2L)
       _ <- ti.expectSt(_.ctr, 5L)
       _ <- ti.message(Stop)
       _ <- ti.expectStop

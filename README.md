@@ -1,6 +1,6 @@
 <!--
 
-   Copyright 2016 Nokia Solutions and Networks Oy
+   Copyright 2016-2017 Nokia Solutions and Networks Oy
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
 **Event sourcing for Akka Typed**
 
 This library implements actor persistence for
-[Akka Typed](http://doc.akka.io/docs/akka/2.4.11/scala/typed.html)
+[Akka Typed](http://doc.akka.io/docs/akka/2.4.17/scala/typed.html)
 with event sourcing. It provides:
 
 * an actor definition API, which
@@ -39,7 +39,7 @@ For the full code of the example in the talk, see
 
 ## Motivation
 
-[Akka Typed](http://doc.akka.io/docs/akka/2.4.11/scala/typed.html)
+[Akka Typed](http://doc.akka.io/docs/akka/2.4.17/scala/typed.html)
 provides a type safe API for defining Akka actors. However, it is
 a new, experimental module of Akka, and currently has no solution
 for actor persistence. The goal of this library is exactly that:
@@ -62,4 +62,4 @@ For how to use the library, see
 
 * Scala 2.11.8
 * Akka 2.4.17
-* Cats 0.9.0, shapeless 2.3.2 and FS2 0.9.4
+* Cats 0.9.0, shapeless 2.3.2 and FS2 0.9.5

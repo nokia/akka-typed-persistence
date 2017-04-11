@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.0.0-M14-3")
+addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.0.0-RC1")

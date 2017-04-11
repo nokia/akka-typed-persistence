@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,40 +42,53 @@ abstract class TestInterpreter[M, D, S](
     sys: at.ActorSystem[Nothing]
 ) {
 
-  sealed case class InterpState(name: String, store: Store, behavior: PersistentBehavior[M, D, S]) {
+  sealed case class InterpState(
+      name: String,
+      store: InterpState.Store,
+      behavior: PersistentBehavior[M, D, S],
+      seqNr: Long
+  ) {
     val ctx = new at.EffectfulActorContext(name, behavior, _mailboxCapacity = 1000, _system = sys)
-    def actorState: S = behavior.state(ctx)
+    def actorState: S =
+      behavior.state(ctx)
     def changeState(newState: S): InterpState =
       this.copy(behavior = this.behavior.withState(ctx, newState))
+    def update(event: D): InterpState =
+      this.copy(store = this.store.update(event), seqNr = this.seqNr + 1L)
+    def snap(snapshot: S): InterpState =
+      this.copy(store = this.store.snap(snapshot))
+  }
+
+  object InterpState {
+
+    sealed trait Store {
+      private[InterpState] def update(event: D): Store
+      private[InterpState] def snap(snapshot: S): Store
+    }
+
+    object Store {
+      val empty: Store = Journal(Nil)
+    }
+
+    case class Snapshot(snapshot: S) extends Store {
+      private[InterpState] def update(event: D): Store = JournalAndSnapshot(event :: Nil, snapshot)
+      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
+    }
+
+    case class Journal(reversedEvents: List[D]) extends Store {
+      private[InterpState] def update(event: D): Store = Journal(event :: reversedEvents)
+      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
+    }
+
+    case class JournalAndSnapshot(reversedEvents: List[D], snapshot: S) extends Store {
+      private[InterpState] def update(event: D): Store = JournalAndSnapshot(event :: reversedEvents, snapshot)
+      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
+    }
   }
 
   sealed trait SpecState
   case object Stopped extends SpecState
   case class Error(ex: Throwable, st: InterpState) extends SpecState
-
-  sealed trait Store {
-    def update(event: D): Store
-    def snap(snapshot: S): Store
-  }
-
-  object Store {
-    val empty: Store = Journal(Nil)
-  }
-
-  case class Snapshot(snapshot: S) extends Store {
-    def update(event: D): Store = JournalAndSnapshot(event :: Nil, snapshot)
-    def snap(snapshot: S): Store = Snapshot(snapshot)
-  }
-
-  case class Journal(reversedEvents: List[D]) extends Store {
-    def update(event: D): Store = Journal(event :: reversedEvents)
-    def snap(snapshot: S): Store = Snapshot(snapshot)
-  }
-
-  case class JournalAndSnapshot(reversedEvents: List[D], snapshot: S) extends Store {
-    def update(event: D): Store = JournalAndSnapshot(event :: reversedEvents, snapshot)
-    def snap(snapshot: S): Store = Snapshot(snapshot)
-  }
 
   type Xss[X] = Either[SpecState, X]
   type TestProc[A] = StateT[Xss, InterpState, A]
@@ -92,7 +105,7 @@ abstract class TestInterpreter[M, D, S](
         eventHook(p.data) match {
           case Success(ev) =>
             for {
-              _ <- StateT.modify[Xss, InterpState](s => s.copy(store = s.store.update(p.data)))
+              _ <- StateT.modify[Xss, InterpState](_.update(p.data))
               st <- getActorSt
             } yield st
           case Failure(ex) =>
@@ -104,12 +117,14 @@ abstract class TestInterpreter[M, D, S](
       case _: ProcA.Snapshot[S] =>
         for {
           st <- getActorSt
-          _ <- StateT.modify[Xss, InterpState](s => s.copy(store = s.store.snap(st)))
+          _ <- StateT.modify[Xss, InterpState](_.snap(st))
         } yield st
       case p: ProcA.Change[S] =>
         for {
           _ <- StateT.modify[Xss, InterpState](_.changeState(p.state))
         } yield p.state
+      case ProcA.SeqNr =>
+        getInterpSt.map(_.seqNr)
       case _: ProcA.Same[S] =>
         getActorSt
       case _: ProcA.Stop[S] =>
@@ -147,7 +162,7 @@ abstract class TestInterpreter[M, D, S](
   protected[this] def fail(msg: String): Nothing
 
   val initialState =
-    InterpState(name, Store.empty, initialBehavior)
+    InterpState(name, InterpState.Store.empty, initialBehavior, seqNr = 0L)
 
   def message(msg: M): TestProc[S] = for {
     st <- getInterpSt
@@ -201,7 +216,7 @@ abstract class TestInterpreter[M, D, S](
     _ <- assertEq(extract(st), expected)
   } yield ()
 
-  def expectStore(p: PartialFunction[Store, Unit]): TestProc[Unit] = for {
+  def expectStore(p: PartialFunction[InterpState.Store, Unit]): TestProc[Unit] = for {
     st <- getInterpSt
     _ <- assertFlag(p.isDefinedAt(st.store), "no match")
   } yield ()

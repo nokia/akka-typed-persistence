@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ lazy val commonSettings = Seq(
   wartremoverErrors ++= Seq(
     Wart.EitherProjectionPartial,
     Wart.OptionPartial,
-    Wart.ListOps,
+    Wart.TraversableOps,
     Wart.JavaConversions,
     Wart.Return,
     Wart.Enumeration
@@ -79,7 +79,7 @@ lazy val commonSettings = Seq(
     Wart.MutableDataStructures,
     Wart.ExplicitImplicitTypes,
     Wart.ImplicitConversion,
-    Wart.Any2StringAdd
+    Wart.StringPlusAny
   ),
 
   // Code formatter:
@@ -109,11 +109,11 @@ lazy val dependencies = new {
   val cats = "org.typelevel" %% "cats" % "0.9.0"
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.4",
+    "co.fs2" %% "fs2-core" % "0.9.5",
     "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
-  val scalatest = "org.scalatest" %% "scalatest" % "3.0.0" % "test-internal"
+  val scalatest = "org.scalatest" %% "scalatest" % "3.0.1" % "test-internal"
   val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.2" % "test-internal"
 
   val akka = new {
