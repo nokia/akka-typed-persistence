@@ -18,6 +18,8 @@
 
 # Akka Typed Persistence
 
+[![Gitter chat](https://badges.gitter.im/nokia/akka-typed-persistence.png)](https://gitter.im/nokia/akka-typed-persistence "Gitter chat")
+
 **Event sourcing for Akka Typed**
 
 This library implements actor persistence for
