@@ -109,7 +109,7 @@ lazy val dependencies = new {
   val cats = "org.typelevel" %% "cats" % "0.9.0"
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.5",
+    "co.fs2" %% "fs2-core" % "0.9.7",
     "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
