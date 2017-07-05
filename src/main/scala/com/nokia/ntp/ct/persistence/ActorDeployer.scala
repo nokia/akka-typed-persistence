@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.nokia.ntp.ct
 package persistence
 
 import akka.{ actor => au, typed => at }
+import akka.typed.scaladsl.ActorContext
+import akka.typed.scaladsl.adapter._
 
 import shapeless.tag.@@
 
@@ -57,22 +59,12 @@ object ActorDeployer {
       d.actorOf(props)
   }
 
-  implicit def typedActorContextDeployerInstance[A]: ActorDeployer[at.ActorContext[A]] = new ActorDeployer[at.ActorContext[A]] {
+  implicit def typedActorContextDeployerInstance[A]: ActorDeployer[ActorContext[A]] = new ActorDeployer[ActorContext[A]] {
 
-    override def deployUntyped(d: at.ActorContext[A])(props: au.Props, name: String): au.ActorRef =
-      untypedActorContextDeployer.deployUntyped(toUntyped(d))(props, name)
+    override def deployUntyped(d: ActorContext[A])(props: au.Props, name: String): au.ActorRef =
+      d.actorOf(props, name)
 
-    override def deployUntypedAnonymous(d: at.ActorContext[A])(props: au.Props): au.ActorRef =
-      untypedActorContextDeployer.deployUntypedAnonymous(toUntyped(d))(props)
-
-    /**
-     * This is an ugly hack, but currently we have no
-     * other way of accessing the underlying untyped
-     * context of an ActorContextAdapter.
-     */
-    private def toUntyped(ctx: at.ActorContext[A]): au.ActorContext = {
-      ActorContextAccess.getUntypedActorContext(ctx)
-    }
+    override def deployUntypedAnonymous(d: ActorContext[A])(props: au.Props): au.ActorRef =
+      d.actorOf(props)
   }
 }
-

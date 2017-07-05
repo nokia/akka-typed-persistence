@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package com.nokia.ntp.ct
 package persistence
 
-import akka.typed.ActorContext
+import akka.typed.scaladsl.ActorContext
 
 /**
  * Recovery behavior definition of a persistent actor
@@ -38,6 +38,6 @@ final case class Recovery[A, D, S](
 )
 
 object Recovery {
-  def apply[A, D, S](m: Update[S, D]): Recovery[A, D, S] =
+  def fromUpdate[A, D, S](implicit m: Update[S, D]): Recovery[A, D, S] =
     Recovery((s, e, _) => m.update(s, e))
 }

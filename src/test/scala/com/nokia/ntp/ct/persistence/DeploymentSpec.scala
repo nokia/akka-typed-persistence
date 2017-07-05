@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package com.nokia.ntp.ct
 package persistence
 
 import akka.{ typed => at }
-import at.AskPattern._
+import at.scaladsl.AskPattern._
 
 class DeploymentSpec extends AbstractPersistenceSpec {
 
@@ -65,17 +65,17 @@ object DeploymentSpec {
   final case object Uninitialized extends ParentState
   final case class Initialized(child: at.ActorRef[Mesg]) extends ParentState
 
-  def parent(pid: PersistenceId) = PersistentFull[Mesg, at.ActorRef[Mesg], ParentState](
-    Uninitialized,
-    _ => s"${pid}-parent",
+  def parent(pid: PersistenceId) = PersistentActor.withRecovery[Mesg, at.ActorRef[Mesg], ParentState](
+    initialState = Uninitialized,
+    pid = _ => s"${pid}-parent",
     recovery = Recovery(
       (_, msg, ctx) => {
         val childRef = child(pid).deployInto(ctx)
         Initialized(childRef)
       }
     )
-  ) { state => ctx =>
-      PersistentBehavior.Total {
+  ) { state => ctx => msg =>
+      msg match {
         case Stop =>
           ctx.stop
         case n @ Num(_, _) =>
@@ -91,20 +91,20 @@ object DeploymentSpec {
       }
     }
 
-  def child(pid: PersistenceId) = Persistent[Mesg, Unit, Int](
-    0,
-    _ => s"${pid}-child"
+  def child(pid: PersistenceId) = PersistentActor.immutable[Mesg, Unit, Int](
+    initialState = 0,
+    pid = _ => s"${pid}-child"
   ) { state => ctx =>
-      PersistentBehavior.Total {
-        case Stop =>
-          ctx.stop
-        case Num(i, r) =>
-          ctx.apply(()).map { state =>
-            r ! i + state
-            state
-          }
-      }
+    {
+      case Stop =>
+        ctx.stop
+      case Num(i, r) =>
+        ctx.apply(()).map { state =>
+          r ! i + state
+          state
+        }
     }
+  }
 
   implicit val childUpdater: Update[Int, Unit] =
     Update.instance((s, _) => s + 1)

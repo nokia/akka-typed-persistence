@@ -20,6 +20,7 @@ package persistence
 import scala.util.control.ControlThrowable
 
 import akka.{ actor => au, persistence => ap, typed => at }
+import akka.typed.scaladsl.Actor
 
 import cats.~>
 
@@ -56,15 +57,16 @@ private abstract class PersistentActorAdapter[A](initialBehavior: at.Behavior[A]
 
 /** Special actor adapter able to run a `PersistentBehavior`. */
 private final class TypedPersistentActor[A, D, S](
-    computePid: at.ActorContext[A] => String,
-    recoveryHandler: Recovery[A, D, S],
-    b: PersistentBehavior[A, D, S]
-) extends PersistentActorAdapter[A](b) { actor =>
+    b: PersistentActor[A, D, S]
+) extends PersistentActorAdapter[A](Actor.deferred { ctx => b.undefer(ctx) }) { actor =>
 
   import TypedPersistentActor._
 
   private[this] lazy val cachedPid =
-    computePid(this.ctx)
+    this.currentBehavior.persistenceId(this.ctx)
+
+  private[this] lazy val recoveryHandler: Recovery[A, D, S] =
+    this.currentBehavior.recovery
 
   override def persistenceId: String =
     cachedPid
@@ -172,6 +174,9 @@ private final class TypedPersistentActor[A, D, S](
   override def preStart(): Unit = {
     super.preStart()
     fixupBehavior()
+
+    // Force initializing recovery; make sure behavior is undeferred correctly:
+    val _ = this.currentBehavior
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
@@ -193,15 +198,15 @@ private final class TypedPersistentActor[A, D, S](
   }
 
   private[this] def canonicalize(next: at.Behavior[A]): at.Behavior[A] = {
-    at.Behavior.canonicalize(next, this.behavior) match {
-      case w: PersistentBehavior.Wrap[A, D, S] =>
+    at.Behavior.canonicalize(next, this.behavior, this.ctx) match {
+      case w: PersistentActor.Wrap[A, D, S] =>
         // It's a wrapped Proc, we'll have to execute it.
         // We'll handle both the intermediate (if any),
         // and the final result with this:
-        def handleResult(r: Either[Throwable, S]): Unit = r match {
+        def handleResult(r: Either[Throwable, S], previous: at.Behavior[A]): Unit = r match {
           case Left(_: ActorStop) =>
             log.debug(s"Stop requested, stopping the actor")
-            this.behavior = at.ScalaDSL.Stopped
+            this.behavior = Actor.stopped(previous)
             // if called asynchronously, the above
             // is not enough, we must call stop:
             this.context.stop(this.self)
@@ -219,7 +224,7 @@ private final class TypedPersistentActor[A, D, S](
         debug(s"Starting to interpret ${w.proc}")
         val task = interpret(w.proc)
         task.unsafeRunAsync { r =>
-          handleResult(r)
+          handleResult(r, w.current)
         }
 
         // If it's not really async, handleResult
@@ -246,12 +251,17 @@ private final class TypedPersistentActor[A, D, S](
   private[this] def currentState: S =
     this.currentBehavior.state(this.ctx)
 
-  private[this] def currentBehavior: PersistentBehavior[A, D, S] = {
+  private[this] def currentBehavior: PersistentActor.PersistentActorImpl[A, D, S] = {
+    this.behavior = at.Behavior.undefer(this.behavior, this.ctx)
     this.behavior match {
-      case w: PersistentBehavior.Wrap[A, D, S] =>
+      case w: PersistentActor.Wrap[A, D, S] =>
         w.current
-      case psb: PersistentBehavior[A, D, S] =>
-        psb
+      case pb: PersistentActor[A, D, S] =>
+        pb match {
+          case pbi: PersistentActor.PersistentActorImpl[A, D, S] =>
+            pbi
+          // NB: it cannot be a DeferredPersistentBehavior, since it's an at.Behavior
+        }
       case b: Any if !at.Behavior.isAlive(b) =>
         impossible("the actor already stopped")
       case x: Any =>
@@ -274,7 +284,7 @@ private final class TypedPersistentActor[A, D, S](
         val persist = Task.unforkedAsync[D] { cb =>
           if (actor.recoveryFinished) {
             actor.persistTaskCallbacks.addLast(cb)
-            debug(s"Calling .persist${if (p.async) "Async" else ""} of data: ${p.data.getClass.getName}")
+            debug(s"Calling .persist${if (!p.async) "Sync" else ""} of data: ${p.data.getClass.getName}")
             val callback: (D => Unit) = { d =>
               debug(s"Persisting data: ${d.getClass.getName} completed")
               val popped = actor.persistTaskCallbacks.removeFirst()

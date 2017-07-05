@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ package com.nokia.ntp.ct.persistence;
  * class is that `akka.typed.adapter.ActorAdapter`
  * is package private, but we must extend it.
  */
-public abstract class PublicActorAdapter<A> extends akka.typed.adapter.ActorAdapter<A> {
+public abstract class PublicActorAdapter<A> extends akka.typed.internal.adapter.ActorAdapter<A> {
 
 	public PublicActorAdapter(akka.typed.Behavior<A> initialBehavior) {
 		super(initialBehavior);

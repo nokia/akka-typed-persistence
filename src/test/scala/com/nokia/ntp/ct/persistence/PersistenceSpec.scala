@@ -21,11 +21,15 @@ import scala.collection.immutable
 import scala.concurrent.Promise
 import scala.util.{ Failure, Success, Try }
 
+import cats.implicits._
+
 import akka.{ typed => at }
-import akka.typed.AskPattern._
-import akka.typed.adapter._
+import akka.typed.scaladsl.Actor
+import akka.typed.scaladsl.AskPattern._
+import akka.typed.scaladsl.adapter._
 
 import shapeless._
+import shapeless.test.illTyped
 
 class PersistenceSpec extends AbstractPersistenceSpec {
 
@@ -96,12 +100,7 @@ class PersistenceSpec extends AbstractPersistenceSpec {
   }
 
   it should "not work in a regular ActorAdapter" in {
-    val name = "hl-regInNotPersistent"
-    val ref: at.ActorRef[Mes] =
-      system.spawn(register(10, name), name)
-    // this will fail, the actor will die:
-    ref.?[Int](r => GetInt(r))
-    awaitTermination(ref).futureValue
+    illTyped("""system.spawn(register(10, "foo"), "foo")""", ".*type mismatch.*")
   }
 
   "Error handling" should "be possible" in {
@@ -208,22 +207,26 @@ class PersistenceSpec extends AbstractPersistenceSpec {
   }
 
   "Requested state change" should "take effect immediately" in {
-    val act = PersistentFull[Set, Int, Long](0L, _ => "chchch", Recovery { (s, _, _) => s }) { state => p =>
-      PersistentBehavior.Total {
-        case Set("", v, replyTo) =>
-          replyTo ! Ack("", v)
-          p.stop
-        case Set(k, _, replyTo) =>
-          for {
-            state <- p.persist(1)
-            _ <- p.change(99L)
-            state <- p.persist(2)
-          } yield {
-            replyTo ! Ack(k, state.toInt)
-            state
-          }
+    val act = PersistentActor.withRecovery[Set, Int, Long](
+      0L,
+      _ => "chchch",
+      Recovery { (s, _, _) => s }
+    ) { state => p =>
+        {
+          case Set("", v, replyTo) =>
+            replyTo ! Ack("", v)
+            p.stop
+          case Set(k, _, replyTo) =>
+            for {
+              state <- p.persist(1)
+              _ <- p.change(99L)
+              state <- p.persist(2)
+            } yield {
+              replyTo ! Ack(k, state.toInt)
+              state
+            }
+        }
       }
-    }
 
     val ref = act.deployInto(system, "chchch")
     ref.?[DictAck](Set("foo", 9, _)).futureValue should be (Ack("foo", 99))
@@ -443,6 +446,71 @@ class PersistenceSpec extends AbstractPersistenceSpec {
     ref2 ! End
     awaitTermination(ref2).futureValue
   }
+
+  "Signal handling" should "be possible (not deferred)" in {
+    val ps = Promise[Unit]()
+    val b = PersistentActor.immutable[Boolean, Int, List[Int]](
+      initialState = Nil,
+      pid = _ => "signalHandlingNotDeferred"
+    ) { state => p =>
+      {
+        case false =>
+          p.same
+        case true =>
+          p.stop
+      }
+    }.onSignal { (state, p) =>
+      {
+        case at.PostStop =>
+          ps.success(())
+          p.same
+      }
+    }
+
+    val ref = b.deployInto(system, "signalHandlingNotDeferred")
+    ref ! true
+    ps.future.futureValue should be (())
+    awaitTermination(ref).futureValue
+  }
+
+  it should "be possible (deferred)" in {
+    val ps = Promise[Unit]()
+    val tm = Promise[Unit]()
+    val b = PersistentActor.deferred[Boolean, Int, List[Int]] { ctx =>
+
+      val child = ctx.spawn(Actor.immutable[Int] { (ctx, msg) => Actor.stopped }, "myChild")
+      ctx.watch(child)
+
+      PersistentActor.immutable[Boolean, Int, List[Int]](
+        initialState = Nil,
+        pid = _ => "signalHandlingDeferred"
+      ) { state => p =>
+        {
+          case false =>
+            child ! 42
+            p.same
+          case true =>
+            p.stop
+        }
+      }.onSignal { (state, p) =>
+        {
+          case at.Terminated(ch) if ch === child =>
+            tm.success(())
+            p.same
+          case at.PostStop =>
+            ps.success(())
+            p.same
+        }
+      }
+    }
+
+    val ref = b.deployInto(system, "signalHandlingDeferred")
+    ref ! false
+    tm.future.futureValue should be (())
+    ref ! true
+    ps.future.futureValue should be (())
+    awaitTermination(ref).futureValue
+  }
 }
 
 object PersistenceSpec {
@@ -484,11 +552,11 @@ object PersistenceSpec {
     implicit val updater: Update[DSS, Set] = Update.instance(_ update _)
   }
 
-  def dictWithAck(initialState: DState, pid: PersistenceId, async: Boolean = true) = Persistent[DictMsg, Set, DState](
+  def dictWithAck(initialState: DState, pid: PersistenceId, async: Boolean = true) = PersistentActor.immutable[DictMsg, Set, DState](
     initialState,
     _ => pid
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case StopDict =>
           p.stop
         case Get(k, r) =>
@@ -515,7 +583,7 @@ object PersistenceSpec {
     snapshots: at.ActorRef[Either[Throwable, DSS]],
     recovery: at.ActorRef[Set],
     handleSnapError: Boolean
-  ) = PersistentFull[DictMsg, Set, DSS](
+  ) = PersistentActor.withRecovery[DictMsg, Set, DSS](
     DSS(0, initialMap),
     _ => pid,
     Recovery(
@@ -527,7 +595,7 @@ object PersistenceSpec {
       completed = (s, _) => s.copy(ctr = 0)
     )
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case StopDict =>
           p.stop
         case Get(k, r) =>
@@ -566,11 +634,11 @@ object PersistenceSpec {
       }
     }
 
-  def dictionary2(state: DState, pid: PersistenceId) = Persistent[DictMsg, Set, DState](
+  def dictionary2(state: DState, pid: PersistenceId) = PersistentActor.immutable[DictMsg, Set, DState](
     state,
     _ => pid
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case StopDict =>
           p.stop
         case Get(k, r) =>
@@ -586,11 +654,11 @@ object PersistenceSpec {
       }
     }
 
-  def dictionaryError(state: DState, pid: PersistenceId, error: Promise[ProcException]) = Persistent[DictMsg, Set, DState](
+  def dictionaryError(state: DState, pid: PersistenceId, error: Promise[ProcException]) = PersistentActor.immutable[DictMsg, Set, DState](
     state,
     _ => pid
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case StopDict =>
           p.stop
         case Get(k, r) =>
@@ -607,11 +675,11 @@ object PersistenceSpec {
     }
 
   /** Simple persistent `Int` register, doesn't use snapshots */
-  def register(startAt: Int, pid: PersistenceId) = PersistentFull[Mes, Int, Int](
+  def register(startAt: Int, pid: PersistenceId) = PersistentActor.withRecovery[Mes, Int, Int](
     startAt,
     _ => pid,
     Recovery { (_, ev, _) => ev }
-  ) { state => p => PersistentBehavior.Total {
+  ) { state => p => {
       case SetInt(n, ackTo) =>
         p.ctx.log.info(s"Starting to persist $n")
         val proc = for {
@@ -642,33 +710,34 @@ object PersistenceSpec {
   implicit val updateUnit: Update[Unit, Unit] =
     Update.instance { (s, e) => s }
 
-  def getSeqNr(pid: PersistenceId) = PersistentFull[SeqNrOp, Unit, Unit](
+  def getSeqNr(pid: PersistenceId) = PersistentActor.withRecovery[SeqNrOp, Unit, Unit](
     (),
     _ => pid,
     Recovery { (_, _, _) => () }
-  ) { state => p => PersistentBehavior.Total {
-      case GetSeqNr(ref) =>
-        for {
-          snr <- p.lastSequenceNr
-          _ = ref ! snr
-          state <- p.same
-        } yield state
-      case Persist(ref) =>
-        for {
-          state <- p.apply(())
-          _ = ref ! (())
-        } yield state
-      case End =>
-        p.stop
-    }
+  ) { state => p =>
+      {
+        case GetSeqNr(ref) =>
+          for {
+            snr <- p.lastSequenceNr
+            _ = ref ! snr
+            state <- p.same
+          } yield state
+        case Persist(ref) =>
+          for {
+            state <- p.apply(())
+            _ = ref ! (())
+          } yield state
+        case End =>
+          p.stop
+      }
     }
 
-  private def promiser(promise: Promise[ProcException], pid: PersistenceId) = PersistentFull[PP, Unit, Int](
+  private def promiser(promise: Promise[ProcException], pid: PersistenceId) = PersistentActor.withRecovery[PP, Unit, Int](
     0,
     _ => pid,
     Recovery { (s, e, _) => s }
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case N(n) =>
           p.persist(()).recover {
             case ex: ProcException =>
@@ -681,12 +750,12 @@ object PersistenceSpec {
       }
     }
 
-  private def unhandled(pid: PersistenceId) = PersistentFull[PP, Unit, Int](
+  private def unhandled(pid: PersistenceId) = PersistentActor.withRecovery[PP, Unit, Int](
     0,
     _ => pid,
     Recovery { (s, _, _) => s }
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case N(n) =>
           p.persist(())
         case AreYouAlive(r) =>
@@ -697,7 +766,7 @@ object PersistenceSpec {
 
   type RecoveryEvent = Int :+: Throwable :+: Unit :+: CNil
 
-  private def recoveryPromiser(promise: Promise[RecoveryEvent], pid: PersistenceId) = PersistentFull[PP, Int, Int](
+  private def recoveryPromiser(promise: Promise[RecoveryEvent], pid: PersistenceId) = PersistentActor.withRecovery[PP, Int, Int](
     0,
     _ => pid,
     Recovery(
@@ -712,18 +781,18 @@ object PersistenceSpec {
       }
     )
   ) { state => p =>
-      PersistentBehavior.Total {
-        case x: Any =>
+      {
+        case x =>
           p.fail(UnexpectedException(new Exception(s"unexpected msg: $x")))
       }
     }
 
-  private def exception(pid: PersistenceId) = PersistentFull[PP, Int, Int](
+  private def exception(pid: PersistenceId) = PersistentActor.withRecovery[PP, Int, Int](
     0,
     _ => pid,
     Recovery { (s, _, _) => s }
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case N(0) =>
           for {
             _ <- p.pure(99)
@@ -740,12 +809,12 @@ object PersistenceSpec {
   private def thrw(ex: Throwable): Nothing =
     throw ex
 
-  private def tryCatchStop(pid: PersistenceId) = PersistentFull[PP, Int, Int](
+  private def tryCatchStop(pid: PersistenceId) = PersistentActor.withRecovery[PP, Int, Int](
     0,
     _ => pid,
     Recovery { (s, _, _) => s }
   ) { state => p =>
-      PersistentBehavior.Total {
+      {
         case _ =>
           p.stop.recover { // this shouldn't work
             case _ => 99

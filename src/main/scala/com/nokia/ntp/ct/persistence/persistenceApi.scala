@@ -112,10 +112,10 @@ sealed trait PersistenceApi[A, D, S] {
   /**
    * The context of the persistent actor.
    */
-  def ctx: at.ActorContext[A]
+  def ctx: at.scaladsl.ActorContext[A]
 }
 
-private final class PersistenceApiImpl[A, D, S](override val ctx: at.ActorContext[A])
+private final class PersistenceApiImpl[A, D, S](override val ctx: at.scaladsl.ActorContext[A])
   extends PersistenceApi[A, D, S]
 
 /** Possible exceptions during a persistence process */
@@ -153,6 +153,28 @@ sealed trait ProcA[A]
 
 /** INTERNAL API: don't use directly, see `Proc` instead */
 object ProcA {
+
+  /**
+   * Extension methods on `Proc`.
+   */
+  implicit class ProcOps[A](p: Proc[A]) {
+
+    /** Error handling combinator (catch and reify) */
+    def attempt: Proc[Either[ProcException, A]] =
+      Free.liftF[ProcA, Either[ProcException, A]](ProcA.Attempt[A](p))
+
+    /** Error handling combinator (catch) */
+    def recover(f: PartialFunction[ProcException, A]): Proc[A] =
+      recoverWith(f andThen ProcA.pure)
+
+    /** Error handling combinator (catch with possible rethrow) */
+    def recoverWith(f: PartialFunction[ProcException, Proc[A]]): Proc[A] = {
+      attempt.flatMap {
+        case Left(ex) => f.lift(ex) getOrElse ProcA.fail(ex)
+        case Right(res) => ProcA.pure(res)
+      }
+    }
+  }
 
   private[persistence] final case class Persist[D, S](data: D, async: Boolean) extends ProcA[S]
   private[persistence] final case class Snapshot[S]() extends ProcA[S]

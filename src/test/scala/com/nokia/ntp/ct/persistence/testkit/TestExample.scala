@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import org.scalatest.FlatSpecLike
 
 import akka.testkit.TestKit
 import akka.typed._
-import akka.typed.ScalaDSL._
 
 import cats.implicits._
 
@@ -52,28 +51,26 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
 
   val name = "TestExample"
 
-  val b = Persistent[MyMsg, MyEv, MyState](
+  val b = PersistentActor.immutable[MyMsg, MyEv, MyState](
     MyState(ctr = 0),
     _ => name
   ) { state => p => {
-      case Msg(_, Add(n, r)) =>
+      case Add(n, r) =>
         for {
           st <- p.apply(Incr(n))
         } yield {
           r ! st.ctr
           st
         }
-      case Msg(_, Snap) =>
+      case Snap =>
         p.snapshot
-      case Msg(_, Stop) =>
+      case Stop =>
         p.stop
-      case Msg(_, ReadSeqNr(r)) =>
+      case ReadSeqNr(r) =>
         for {
           seqNr <- p.lastSequenceNr
           _ = r ! seqNr
         } yield state
-      case Sig(_, _) =>
-        p.same
     }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package com.nokia.ntp.ct
 
 import akka.{ typed => at }
-import akka.typed.ScalaDSL.MessageOrSignal
 
 import cats.free.Free
 
@@ -35,54 +34,6 @@ package object persistence {
    * this is a monad, so commands can be chained with flatMap.
    */
   type Proc[A] = Free[ProcA, A]
-
-  /**
-   * Extension methods on `Proc`
-   */
-  implicit class ProcOps[A](p: Proc[A]) {
-
-    /** Error handling combinator (catch and reify) */
-    def attempt: Proc[Either[ProcException, A]] =
-      Free.liftF[ProcA, Either[ProcException, A]](ProcA.Attempt[A](p))
-
-    /** Error handling combinator (catch) */
-    def recover(f: PartialFunction[ProcException, A]): Proc[A] =
-      recoverWith(f andThen ProcA.pure)
-
-    /** Error handling combinator (catch with possible rethrow) */
-    def recoverWith(f: PartialFunction[ProcException, Proc[A]]): Proc[A] = {
-      attempt.flatMap {
-        case Left(ex) => f.lift(ex) getOrElse ProcA.fail(ex)
-        case Right(res) => ProcA.pure(res)
-      }
-    }
-  }
-
-  /** Factory for a `PersistentBehavior` */
-  def Persistent[A, D, S]( // scalastyle:ignore
-    initialState: S,
-    pid: at.ActorContext[A] => PersistenceId
-  )(
-    f: S => PersistenceApi[A, D, S] => MessageOrSignal[A] => Proc[S]
-  )(implicit m: Update[S, D]): PersistentBehavior[A, D, S] = {
-    PersistentFull[A, D, S](initialState, pid, Recovery(m))(f)
-  }
-
-  /** Factory for a `PersistentBehavior` */
-  def PersistentFull[A, D, S]( // scalastyle:ignore
-    initialState: S,
-    pid: at.ActorContext[A] => PersistenceId,
-    recovery: Recovery[A, D, S]
-  )(
-    f: S => PersistenceApi[A, D, S] => MessageOrSignal[A] => Proc[S]
-  ): PersistentBehavior[A, D, S] = {
-    new PersistentBehaviorImpl[A, D, S](
-      _ => initialState,
-      pid,
-      recovery,
-      (s, api, ctx, msg) => f(s)(api)(msg)
-    )
-  }
 
   // Internal utilities:
 
@@ -105,5 +56,5 @@ package object persistence {
 
   /** For creating typed ActorRef adapters */
   private[persistence] def actorRef[A](untyped: akka.actor.ActorRef): at.ActorRef[A] =
-    at.adapter.actorRefAdapter(untyped)
+    at.scaladsl.adapter.actorRefAdapter(untyped)
 }

@@ -22,10 +22,13 @@ import scala.util.{ Failure, Success, Try }
 import scala.util.Random
 
 import akka.{ typed => at }
+import akka.typed.scaladsl.Actor
 
 import cats.{ ~>, Eq }
 import cats.data.StateT
 import cats.implicits._
+
+import PersistentActor.PersistentActorImpl
 
 /**
  * WIP testing framework for our persistence API.
@@ -38,19 +41,18 @@ import cats.implicits._
 @SuppressWarnings(Array(unsafeCast)) // NB: a ton of false positives
 abstract class TestInterpreter[M, D, S](
     name: String,
-    initialBehavior: PersistentBehavior[M, D, S],
+    initialBehavior: PersistentActor[M, D, S],
     sys: at.ActorSystem[Nothing]
 ) {
 
   sealed case class InterpState(
       name: String,
-      store: InterpState.Store,
-      behavior: PersistentBehavior[M, D, S],
-      seqNr: Long
+      store: Store,
+      behavior: PersistentActorImpl[M, D, S],
+      seqNr: Long,
+      ctx: at.testkit.EffectfulActorContext[M]
   ) {
-    val ctx = new at.EffectfulActorContext(name, behavior, _mailboxCapacity = 1000, _system = sys)
-    def actorState: S =
-      behavior.state(ctx)
+    def actorState: S = behavior.state(ctx)
     def changeState(newState: S): InterpState =
       this.copy(behavior = this.behavior.withState(ctx, newState))
     def update(event: D): InterpState =
@@ -59,36 +61,33 @@ abstract class TestInterpreter[M, D, S](
       this.copy(store = this.store.snap(snapshot))
   }
 
-  object InterpState {
-
-    sealed trait Store {
-      private[InterpState] def update(event: D): Store
-      private[InterpState] def snap(snapshot: S): Store
-    }
-
-    object Store {
-      val empty: Store = Journal(Nil)
-    }
-
-    case class Snapshot(snapshot: S) extends Store {
-      private[InterpState] def update(event: D): Store = JournalAndSnapshot(event :: Nil, snapshot)
-      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
-    }
-
-    case class Journal(reversedEvents: List[D]) extends Store {
-      private[InterpState] def update(event: D): Store = Journal(event :: reversedEvents)
-      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
-    }
-
-    case class JournalAndSnapshot(reversedEvents: List[D], snapshot: S) extends Store {
-      private[InterpState] def update(event: D): Store = JournalAndSnapshot(event :: reversedEvents, snapshot)
-      private[InterpState] def snap(snapshot: S): Store = Snapshot(snapshot)
-    }
-  }
-
   sealed trait SpecState
   case object Stopped extends SpecState
   case class Error(ex: Throwable, st: InterpState) extends SpecState
+
+  sealed trait Store {
+    def update(event: D): Store
+    def snap(snapshot: S): Store
+  }
+
+  object Store {
+    val empty: Store = Journal(Nil)
+  }
+
+  case class Snapshot(snapshot: S) extends Store {
+    def update(event: D): Store = JournalAndSnapshot(event :: Nil, snapshot)
+    def snap(snapshot: S): Store = Snapshot(snapshot)
+  }
+
+  case class Journal(reversedEvents: List[D]) extends Store {
+    def update(event: D): Store = Journal(event :: reversedEvents)
+    def snap(snapshot: S): Store = Snapshot(snapshot)
+  }
+
+  case class JournalAndSnapshot(reversedEvents: List[D], snapshot: S) extends Store {
+    def update(event: D): Store = JournalAndSnapshot(event :: reversedEvents, snapshot)
+    def snap(snapshot: S): Store = Snapshot(snapshot)
+  }
 
   type Xss[X] = Either[SpecState, X]
   type TestProc[A] = StateT[Xss, InterpState, A]
@@ -161,8 +160,15 @@ abstract class TestInterpreter[M, D, S](
 
   protected[this] def fail(msg: String): Nothing
 
-  val initialState =
-    InterpState(name, InterpState.Store.empty, initialBehavior, seqNr = 0L)
+  val initialState = {
+    val ctx = new at.testkit.EffectfulActorContext(name, Actor.deferred[M] { ctx => initialBehavior.undefer(ctx) }, _mailboxCapacity = 1000, _system = sys)
+    ctx.currentBehavior match {
+      case pbi: PersistentActorImpl[M, D, S] =>
+        InterpState(name, Store.empty, pbi, 0L, ctx)
+      case x: Any =>
+        impossible(s"invalid undeferred persistent behavior: ${x}")
+    }
+  }
 
   def message(msg: M): TestProc[S] = for {
     st <- getInterpSt
@@ -182,7 +188,7 @@ abstract class TestInterpreter[M, D, S](
 
   def ask[A](msg: at.ActorRef[A] => M): TestProc[A] = {
     val tmpName = Random.alphanumeric.take(10).mkString("")
-    val inb = at.Inbox[A](tmpName)
+    val inb = at.testkit.Inbox[A](tmpName)
     val mesg = msg(inb.ref)
     for {
       st <- message(mesg)
@@ -216,7 +222,7 @@ abstract class TestInterpreter[M, D, S](
     _ <- assertEq(extract(st), expected)
   } yield ()
 
-  def expectStore(p: PartialFunction[InterpState.Store, Unit]): TestProc[Unit] = for {
+  def expectStore(p: PartialFunction[Store, Unit]): TestProc[Unit] = for {
     st <- getInterpSt
     _ <- assertFlag(p.isDefinedAt(st.store), "no match")
   } yield ()

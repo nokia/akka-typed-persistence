@@ -31,7 +31,8 @@ lazy val examples = (project in file("examples")).
 lazy val commonSettings = Seq(
 
   // Scala:
-  scalaVersion := "2.11.8",
+  scalaVersion := "2.11.11",
+  crossScalaVersions := Seq(scalaVersion.value, "2.12.2"),
   scalacOptions ++= Seq(
     "-feature",
     "-deprecation",
@@ -40,6 +41,7 @@ lazy val commonSettings = Seq(
     "-target:jvm-1.8",
     "-Xlint:_",
     "-Xfuture",
+    "-Ypartial-unification",
     "-Yno-adapted-args",
     "-Ywarn-numeric-widen",
     "-Ywarn-dead-code",
@@ -92,9 +94,7 @@ lazy val commonSettings = Seq(
     Seq(dependencies.cats, dependencies.shapeless),
     dependencies.fs2,
     Seq(dependencies.scalatest, dependencies.scalacheck)
-  ).flatten,
-
-  addCompilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.2.0" cross CrossVersion.full)
+  ).flatten
 )
 
 lazy val publishSettings = Seq(
@@ -113,21 +113,23 @@ lazy val dependencies = new {
     "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
-  val scalatest = "org.scalatest" %% "scalatest" % "3.0.1" % "test-internal"
-  val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.2" % "test-internal"
+  val scalatest = "org.scalatest" %% "scalatest" % "3.0.2" % "test-internal"
+  val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.5" % "test-internal"
 
   val akka = new {
 
-    val version = "2.4.17"
+    val version = "2.5.3"
     val group = "com.typesafe.akka"
 
     val actor = group %% "akka-actor" % version
-    val typed = group %% "akka-typed-experimental" % version
+    val typed = group %% "akka-typed" % version
+    val typedTestkit = group %% "akka-typed-testkit" % version
     val persistence = group %% "akka-persistence" % version
 
     val all = Seq(
       actor,
       typed,
+      typedTestkit, // TODO: create separate -testkit module
       persistence
     )
   }

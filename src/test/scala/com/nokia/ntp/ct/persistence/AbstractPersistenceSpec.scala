@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,12 +36,12 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigValueFactory
 
 import akka.{ actor => au, persistence => ap, typed => at }
+import akka.typed.scaladsl.Actor
+import akka.typed.scaladsl.AskPattern._
+import akka.typed.scaladsl.adapter._
 import akka.Done
 import akka.event.LoggingAdapter
 import akka.testkit.TestKit
-import akka.typed.AskPattern._
-import akka.typed.ScalaDSL._
-import akka.typed.adapter._
 import akka.util.Timeout
 
 import cats.implicits._
@@ -130,27 +130,25 @@ abstract class AbstractPersistenceSpec
   }
 
   private def watchDog(ref: at.ActorRef[Nothing], p: Promise[Unit]): at.Behavior[Nothing] = {
-    FullTotal[Done.type] {
-      case Sig(ctx, at.PreStart) =>
-        ctx.watch[Nothing](ref)
-        Same
-      case Sig(ctx, at.Terminated(r)) =>
-        if (ref === r) {
-          // OK, it died, but we add some more
-          // delay, because if the caller wants
-          // to immediately recreate an actor
-          // with the same name, that could fail.
-          ctx.schedule(500.millis, ctx.self, Done)
-          Same
-        } else {
-          p.failure(new Exception(s"Unexpected termination message from ${r}"))
-          Stopped
-        }
-      case Sig(_, _) =>
-        Unhandled
-      case Msg(ctx, Done) =>
+    Actor.deferred[Done.type] { ctx =>
+      ctx.watch[Nothing](ref)
+      Actor.immutable[Done.type] { (ctx, msg) =>
         p.success(())
-        Stopped
+        Actor.stopped
+      }.onSignal {
+        case (ctx, at.Terminated(r)) =>
+          if (ref === r) {
+            // OK, it died, but we add some more
+            // delay, because if the caller wants
+            // to immediately recreate an actor
+            // with the same name, that could fail.
+            ctx.schedule(500.millis, ctx.self, Done)
+            Actor.same
+          } else {
+            p.failure(new Exception(s"Unexpected termination message from ${r}"))
+            Actor.stopped
+          }
+      }
     }.narrow
   }
 
@@ -195,7 +193,7 @@ abstract class AbstractPersistenceSpec
 
 object AbstractPersistenceSpec {
 
-  private[persistence] implicit class ContextOps[A](ctx: at.ActorContext[A]) {
+  private[persistence] implicit class ContextOps[A](ctx: at.scaladsl.ActorContext[A]) {
     def log: LoggingAdapter =
       ctx.system.log
   }
