@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ import akka.actor.ActorSystem
 import akka.actor.Scheduler
 import akka.testkit.TestKit
 import akka.typed.ActorRef
-import akka.typed.AskPattern._
-import akka.typed.adapter.actorRefAdapter
+import akka.typed.scaladsl.AskPattern._
+import akka.typed.scaladsl.adapter.actorRefAdapter
 import akka.util.Timeout
 
 class PingActorSpec extends TestKit(ActorSystem("pingSystem")) with FlatSpecLike with Matchers with ScalaFutures {

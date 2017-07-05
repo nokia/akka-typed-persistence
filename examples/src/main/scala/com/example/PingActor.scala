@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Nokia Solutions and Networks Oy
+ * Copyright 2016-2017 Nokia Solutions and Networks Oy
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package com.example
 
 import akka.typed.ActorRef
 
-import com.nokia.ntp.ct.persistence.{ Persistent, PersistentBehavior, Update }
+import com.nokia.ntp.ct.persistence.{ PersistentActor, Update }
 
 object PingActor {
 
@@ -31,20 +31,23 @@ object PingActor {
       Update.instance(_ + _.amount)
   }
 
-  val myBehavior = Persistent[MyMsg, Increment, Int](0, _.self.path.name) { state => ctx =>
-    PersistentBehavior.Total {
-      case MyMsg("ping", r) =>
-        for {
-          state <- ctx.apply(Increment(1))
-        } yield {
-          r ! s"${state} pings so far"
-          state
-        }
-      case MyMsg("stop", r) =>
-        r ! "OK"
-        ctx.stop
-      case MyMsg(_, _) =>
-        ctx.same
+  val myBehavior = PersistentActor.immutable[MyMsg, Increment, Int](
+    0,
+    _.self.path.name
+  ) { state => ctx => msg =>
+      msg match {
+        case MyMsg("ping", r) =>
+          for {
+            state <- ctx.apply(Increment(1))
+          } yield {
+            r ! s"${state} pings so far"
+            state
+          }
+        case MyMsg("stop", r) =>
+          r ! "OK"
+          ctx.stop
+        case MyMsg(_, _) =>
+          ctx.same
+      }
     }
-  }
 }
