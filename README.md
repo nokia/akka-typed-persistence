@@ -64,4 +64,4 @@ For how to use the library, see
 
 * Scala 2.11 or 2.12
 * Akka 2.5.3
-* Cats 0.9.0, shapeless 2.3.2 and FS2 0.9.5
+* Cats 0.9.0, shapeless 2.3.2 and FS2 0.9.7
