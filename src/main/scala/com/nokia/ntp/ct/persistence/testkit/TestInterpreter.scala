@@ -24,11 +24,14 @@ import scala.util.Random
 import akka.{ typed => at }
 import akka.typed.scaladsl.Actor
 
-import cats.{ ~>, Eq }
+import cats.{ Eq, ~> }
 import cats.data.StateT
 import cats.implicits._
 
 import PersistentActor.PersistentActorImpl
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 /**
  * WIP testing framework for our persistence API.
@@ -143,6 +146,9 @@ abstract class TestInterpreter[M, D, S](
           case Right((st, x)) =>
             Right((st, Right(x)))
         }
+      case f: ProcA.FromFuture[X] =>
+        val s = Await.result(f.fut, Duration.Inf)
+        getActorSt.map(_ => s)
       case f: ProcA.Fail[X] =>
         getInterpSt.flatMap { st =>
           StateT.lift[Xss, InterpState, X](Left(Error(f.ex, st)))
