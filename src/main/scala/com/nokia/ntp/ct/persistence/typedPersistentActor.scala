@@ -24,8 +24,10 @@ import akka.typed.scaladsl.Actor
 
 import cats.~>
 
-import fs2.Task
+import fs2.{ Strategy, Task }
 import fs2.interop.cats._
+
+import scala.concurrent.ExecutionContext
 
 /**
  * Combined `PersistentActor` and `ActorAdapter`.
@@ -330,6 +332,10 @@ private final class TypedPersistentActor[A, D, S](
         }
       case ProcA.Fail(ex) =>
         Task.fail(ex)
+      case f: ProcA.FromFuture[X] =>
+        implicit val S: Strategy = Strategy.fromExecutor(ctx.executionContext)
+        implicit val ec: ExecutionContext = ctx.executionContext
+        Task.fromFuture(f.fut)
     }
   }
 

@@ -27,10 +27,14 @@ import akka.typed._
 
 import cats.implicits._
 
+import scala.concurrent.{ ExecutionContext, Promise }
+import scala.concurrent.duration._
+
 class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { spec =>
 
   sealed trait MyMsg
   case class Add(n: Int, replyTo: ActorRef[Long]) extends MyMsg
+  case class FutureAdd(delay: FiniteDuration, n: Int, replyTo: ActorRef[Long]) extends MyMsg
   case object Snap extends MyMsg
   case object Stop extends MyMsg
   case class ReadSeqNr(replyTo: ActorRef[Long]) extends MyMsg
@@ -66,6 +70,17 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
         p.snapshot
       case Stop =>
         p.stop
+      case FutureAdd(delay, n, r) =>
+        val promise = Promise[MyState]()
+        implicit val ec: ExecutionContext = p.ctx.executionContext
+
+        p(Incr(n)) flatMap { s =>
+          p.ctx.system.scheduler.scheduleOnce(delay)(promise.success(s))
+          p.future(promise.future map { s =>
+            r ! (s.ctr)
+            s
+          })
+        }
       case ReadSeqNr(r) =>
         for {
           seqNr <- p.lastSequenceNr
@@ -88,7 +103,9 @@ class TestExample extends TestKit(akka.actor.ActorSystem()) with FlatSpecLike { 
       _ <- ti.expect[Long](ReadSeqNr, 1L)
       _ <- ti.expect[Long](Add(2, _), 5L)
       _ <- ti.expect[Long](ReadSeqNr, 2L)
-      _ <- ti.expectSt(_.ctr, 5L)
+      _ <- ti.expect[Long](FutureAdd(250.milli, 2, _), 7L)
+      _ <- ti.expect[Long](ReadSeqNr, 3L)
+      _ <- ti.expectSt(_.ctr, 7L)
       _ <- ti.message(Stop)
       _ <- ti.expectStop
     } yield ())

@@ -18,8 +18,9 @@ package com.nokia.ntp.ct
 package persistence
 
 import akka.{ persistence => ap, typed => at }
-
 import cats.free.Free
+
+import scala.concurrent.Future
 
 /**
  * `Proc` primitives and combinators.
@@ -110,6 +111,12 @@ sealed trait PersistenceApi[A, D, S] {
     ProcA.pure(x)
 
   /**
+   * A `Proc` which accepts a `Future[X]` and returns `X`
+   */
+  def future[X](fut: Future[X]): Proc[X] =
+    Free.liftF[ProcA, X](ProcA.FromFuture[X](fut))
+
+  /**
    * The context of the persistent actor.
    */
   def ctx: at.scaladsl.ActorContext[A]
@@ -184,6 +191,7 @@ object ProcA {
   private[persistence] final case class Stop[S]() extends ProcA[S]
   private[persistence] final case class Attempt[A](proc: Proc[A]) extends ProcA[Either[ProcException, A]]
   private[persistence] final case class Fail[A](ex: ProcException) extends ProcA[A]
+  private[persistence] final case class FromFuture[A](fut: Future[A]) extends ProcA[A]
 
   private[persistence] def same[X]: Proc[X] =
     Free.liftF[ProcA, X](Same[X]())
