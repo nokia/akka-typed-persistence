@@ -23,9 +23,7 @@ import akka.{ actor => au, persistence => ap, typed => at }
 import akka.typed.scaladsl.Actor
 
 import cats.~>
-
-import fs2.Task
-import fs2.interop.cats._
+import cats.effect.IO
 
 /**
  * Combined `PersistentActor` and `ActorAdapter`.
@@ -269,7 +267,7 @@ private final class TypedPersistentActor[A, D, S](
     }
   }
 
-  private[this] def interpret[X](proc: Proc[X]): Task[X] =
+  private[this] def interpret[X](proc: Proc[X]): IO[X] =
     proc.foldMap(interpreter)
 
   private[this] val persistTaskCallbacks: java.util.Deque[Either[ProcException, D] => Unit] =
@@ -278,10 +276,10 @@ private final class TypedPersistentActor[A, D, S](
   private[this] val snapshotTaskCallbacks: java.util.Deque[Either[SnapshotFailure, Unit] => Unit] =
     new java.util.LinkedList
 
-  private[this] val interpreter: (ProcA ~> Task) = new (ProcA ~> Task) {
-    override def apply[X](proc: ProcA[X]): Task[X] = proc match {
+  private[this] val interpreter: (ProcA ~> IO) = new (ProcA ~> IO) {
+    override def apply[X](proc: ProcA[X]): IO[X] = proc match {
       case p: ProcA.Persist[D, S] =>
-        val persist = Task.unforkedAsync[D] { cb =>
+        val persist = IO.async[D] { cb =>
           if (actor.recoveryFinished) {
             actor.persistTaskCallbacks.addLast(cb)
             debug(s"Calling .persist${if (!p.async) "Sync" else ""} of data: ${p.data.getClass.getName}")
@@ -302,34 +300,34 @@ private final class TypedPersistentActor[A, D, S](
         }
         persist.map { _ => actor.currentState }
       case s: ProcA.Snapshot[S] =>
-        val snap = Task.unforkedAsync[Unit] { (cb: Either[Throwable, Unit] => Unit) =>
+        val snap = IO.async[Unit] { (cb: Either[Throwable, Unit] => Unit) =>
           debug(s"Taking snapshot ...")
           actor.saveSnapshot(actor.currentState)
           actor.snapshotTaskCallbacks.addLast(cb)
         }
         snap.map { _ => actor.currentState }
       case ch: ProcA.Change[S] =>
-        Task.delay {
+        IO {
           debug(s"Executing requested state change to ${ch.state}")
           actor.changeState(ch.state)
           ch.state
         }
       case ProcA.SeqNr =>
-        Task.delay(actor.lastSequenceNr)
+        IO(actor.lastSequenceNr)
       case _: ProcA.Same[S] =>
-        Task.delay(actor.currentBehavior.state(actor.ctx))
+        IO(actor.currentBehavior.state(actor.ctx))
       case ProcA.Stop() =>
-        Task.fail(new ActorStop)
+        IO.raiseError(new ActorStop)
       case ProcA.Attempt(p) =>
         val inner = interpret(p)
         inner.attempt.flatMap {
-          case Left(ex: ActorStop) => Task.fail(ex)
-          case Left(ex: ProcException) => Task.now(Left(ex))
-          case Left(ex) => Task.now(Left(UnexpectedException(ex)))
-          case Right(res) => Task.now(Right(res))
+          case Left(ex: ActorStop) => IO.raiseError(ex)
+          case Left(ex: ProcException) => IO.pure(Left(ex))
+          case Left(ex) => IO.pure(Left(UnexpectedException(ex)))
+          case Right(res) => IO.pure(Right(res))
         }
       case ProcA.Fail(ex) =>
-        Task.fail(ex)
+        IO.raiseError(ex)
     }
   }
 

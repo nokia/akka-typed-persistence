@@ -31,8 +31,8 @@ lazy val examples = (project in file("examples")).
 lazy val commonSettings = Seq(
 
   // Scala:
-  scalaVersion := "2.11.11",
-  crossScalaVersions := Seq(scalaVersion.value, "2.12.2"),
+  scalaVersion := "2.12.3",
+  crossScalaVersions := Seq(scalaVersion.value, "2.11.11"),
   scalacOptions ++= Seq(
     "-feature",
     "-deprecation",
@@ -91,8 +91,8 @@ lazy val commonSettings = Seq(
   // Dependencies:
   libraryDependencies ++= Seq(
     dependencies.akka.all,
-    Seq(dependencies.cats, dependencies.shapeless),
-    dependencies.fs2,
+    dependencies.cats,
+    Seq(dependencies.shapeless),
     Seq(dependencies.scalatest, dependencies.scalacheck)
   ).flatten
 )
@@ -106,19 +106,20 @@ lazy val publishSettings = Seq(
 
 lazy val dependencies = new {
 
-  val cats = "org.typelevel" %% "cats" % "0.9.0"
-  val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
-  val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.7",
-    "co.fs2" %% "fs2-cats" % "0.3.0"
+  val cats = List(
+    "org.typelevel" %% "cats-core" % "1.0.0-MF",
+    "org.typelevel" %% "cats-free" % "1.0.0-MF",
+    "org.typelevel" %% "cats-effect" % "0.4"
   )
+
+  val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
 
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.2" % "test-internal"
   val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.5" % "test-internal"
 
   val akka = new {
 
-    val version = "2.5.3"
+    val version = "2.5.4"
     val group = "com.typesafe.akka"
 
     val actor = group %% "akka-actor" % version
