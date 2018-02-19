@@ -1,6 +1,6 @@
 <!--
 
-   Copyright 2016-2017 Nokia Solutions and Networks Oy
+   Copyright 2016-2018 Nokia Solutions and Networks Oy
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -42,10 +42,11 @@ For the full code of the example in the talk, see
 ## Motivation
 
 [Akka Typed](http://doc.akka.io/docs/akka/2.5.4/scala/typed.html)
-provides a type safe API for defining Akka actors. However, it is
-an experimental module of Akka, and currently has no solution
-for actor persistence. The goal of this library is exactly that:
-integrating Akka Typed and Akka Persistence.
+provides a type safe API for defining Akka actors. However, originally
+it had no solution for actor persistence. The goal of this library was
+exactly that: integrating Akka Typed and Akka Persistence. (Since then,
+Akka Typed have been extended to include a
+[persistence API](https://akka.io/blog/2017/10/13/typed-persistence).)
 
 
 ## Getting started
